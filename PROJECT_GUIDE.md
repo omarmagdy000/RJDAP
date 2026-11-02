@@ -111,10 +111,10 @@ This freezes the contract so all five people can work in parallel. After this, e
 - [ ] **All**: freeze the **log CSV schema** (see below).
 - [ ] **All**: agree ports (server on UDP **9000**), folder layout, and the `config.py` values (ports, seed, timeouts, N, D).
 - [ ] **All**: pick **2 original mechanisms** (see [section 14](#14-originality-graded)).
-- [ ] **R1**: create/finish the repo (done: `omarmagdy000/RJDAP`, local structure committed; remote push pending).
-- [ ] **R1**: add all 5 members as collaborators; replace `@R1`..`@R5` in `.github/CODEOWNERS` with real GitHub usernames.
+- [x] **R1**: create/finish the repo (done: `omarmagdy000/RJDAP`, local structure committed and pushed to `origin/main`).
+- [ ] **R1**: add all 5 members as collaborators; replace `@R2`..`@R5` in `.github/CODEOWNERS` with real GitHub usernames (`@omarmagdy000` set for R1).
 - [ ] **R1**: protect `main` (PR + 1 review required) if the plan is to enforce that on GitHub.
-- [ ] **R1**: write `src/protocol.py` (`pack` / `unpack` / `crc16`) plus unit tests; **push by day 2**; tag `protocol-v1`.
+- [x] **R1**: write `src/protocol.py` (`pack` / `unpack` / `crc16`) plus unit tests; **push by day 2**; tag `protocol-v1`.
 - [ ] **R5**: write `src/logger.py` and `src/config.py`; push.
 - [ ] **All**: install the tools ([section 8.1](#81-setup-everyone-day-1)); confirm Python is 3.10 or newer.
 - [ ] **R4**: get Linux (Ubuntu VM or WSL2); prove `tc netem` works on `lo` (add a delay, ping, delete it; capture with tcpdump).
@@ -149,8 +149,8 @@ msg_type,task_id,worker_id,attempt,bytes,seed,scenario,run
 **Goal:** a working JOIN + DISPATCH (+ RESULT + ACK) exchange over UDP between one server and clients on localhost, with docs and a demo.
 
 **Submission contents**
-- [ ] Proposal (3 pages max): scenario, motivation, approach.
-- [ ] Mini-RFC draft, sections 1-3 (introduction, architecture, message formats + sample).
+- [x] Proposal (3 pages max): scenario, motivation, approach (`docs/proposal/PROPOSAL.md`).
+- [x] Mini-RFC draft, sections 1-3 (introduction, architecture, message formats + sample) (`docs/rfc/MINI_RFC.md`).
 - [ ] Working prototype (server + client).
 - [ ] README + 5-minute demo video link.
 - [ ] Script for the Baseline local scenario.
@@ -159,12 +159,12 @@ msg_type,task_id,worker_id,attempt,bytes,seed,scenario,run
 **Per-role tasks**
 
 *R1: Protocol Architect & RFC Lead*
-- [ ] Final protocol name + version; header table with byte offsets and struct format.
-- [ ] `protocol.py` (pack/unpack/CRC) published to the team by day 2; `tests/test_protocol.py` green.
-- [ ] Draw FSMs: server task states (PENDING, DISPATCHED, DONE) and the worker states.
-- [ ] Write the proposal (3 pages max).
-- [ ] Write RFC sections 1-3, including one **sample packet in hex**.
-- [ ] Define the 2 original mechanisms (with R2/R3) and how they differ from known protocols.
+- [x] Final protocol name + version; header table with byte offsets and struct format.
+- [x] `protocol.py` (pack/unpack/CRC) published to the team by day 2; `tests/test_protocol.py` green (19/19 tests pass).
+- [x] Draw FSMs: server task states (PENDING, DISPATCHED, DONE) and the worker states (`docs/diagrams/FSM_DIAGRAMS.md` & `docs/rfc/MINI_RFC.md`).
+- [x] Write the proposal (3 pages max) (`docs/proposal/PROPOSAL.md`).
+- [x] Write RFC sections 1-3, including one **sample packet in hex** (`docs/rfc/MINI_RFC.md`).
+- [x] Define the 2 original mechanisms (with R2/R3) and how they differ from known protocols.
 
 *R2: Command Hub (Server) Engineer*
 - [ ] UDP socket on port 9000 with a short timeout (`settimeout(0.05)`) so the loop can check timers.
@@ -482,7 +482,7 @@ Edit **only files you own**. Need a change elsewhere? Ask the owner or open a Gi
 
 | Role | Name (fill in) | Goal | Owns |
 |---|---|---|---|
-| **R1** Protocol Architect & RFC Lead | `________` | Decide exactly what every packet looks like and what rules both sides follow, then document it | `src/protocol.py`, `tests/test_protocol.py`, `docs/rfc/MINI_RFC.md`, `docs/proposal/`, `docs/diagrams/` |
+| **R1** Protocol Architect & RFC Lead | `omarmagdy000` | Decide exactly what every packet looks like and what rules both sides follow, then document it | `src/protocol.py`, `tests/test_protocol.py`, `docs/rfc/MINI_RFC.md`, `docs/proposal/`, `docs/diagrams/`, `R1_ROLE_GUIDE.md` |
 | **R2** Command Hub (Server) Engineer | `________` | Dispatcher that hands out tasks and guarantees each result is counted once | `src/server.py` |
 | **R3** Worker Node Engineer | `________` | Compute tasks and return each result reliably, never computing the same task twice | `src/worker.py` |
 | **R4** Network Testbed & Automation Engineer | `________` | Linux, netem, captures and scripts that run every scenario identically every time | `scripts/`, `results/` |
@@ -609,8 +609,8 @@ Ideas:
 - **Compact task-range encoding** instead of sending full task lists.
 
 Chosen mechanisms (decide at Day 0):
-1. `________`
-2. `________`
+1. **M1 — Compute-Compensated, Attempt-Matched Adaptive RTO** (`compute_us` in `TASK_RESULT` + echoed `Attempt_Num` to feed pure network RTT into per-worker `SRTT`/`RTTVAR` without Karn's ambiguity).
+2. **M2 — Cumulative 32-Bit ACK Bitmap across Independent Tasks** (`ACK_RESULT` carries a 32-bit bitmap confirming completion of `task_id - 1` through `task_id - 32`).
 
 ---
 
@@ -696,3 +696,4 @@ ROLES: R1 protocol+RFC (protocol.py), R2 server (server.py), R3 worker (worker.p
 DEADLINES: Phase 1 week 7, Phase 2 week 12, Phase 3 week 14 (confirm dates on LMS).
 FILES: PROJECT_GUIDE.md (this file: everything, with milestone checklists).
 ```
+
