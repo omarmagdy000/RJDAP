@@ -1,9 +1,10 @@
 # Owners per file (replace with each member's GitHub username)
-/src/protocol.py @R1
-/tests/test_protocol.py @R1
-/docs/rfc/ @R1
-/docs/proposal/ @R1
-/docs/diagrams/ @R1
+/src/protocol.py @omarmagdy000
+/tests/test_protocol.py @omarmagdy000
+/docs/rfc/ @omarmagdy000
+/docs/proposal/ @omarmagdy000
+/docs/diagrams/ @omarmagdy000
+/R1_ROLE_GUIDE.md @omarmagdy000
 /src/server.py @R2
 /src/worker.py @R3
 /scripts/ @R4
