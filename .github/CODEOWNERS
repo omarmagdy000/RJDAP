@@ -1,0 +1,15 @@
+# Owners per file (replace with each member's GitHub username)
+/src/protocol.py @R1
+/tests/test_protocol.py @R1
+/docs/rfc/ @R1
+/docs/proposal/ @R1
+/docs/diagrams/ @R1
+/src/server.py @R2
+/src/worker.py @R3
+/scripts/ @R4
+/results/ @R4
+/src/logger.py @R5
+/analysis/ @R5
+/docs/report/ @R5
+/docs/slides/ @R5
+/README.txt @R5

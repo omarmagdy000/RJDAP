@@ -1,0 +1,6 @@
+# Networking: Python 3.10+ standard library only.
+# Analysis only (R5):
+pandas
+matplotlib
+# Optional:
+psutil
