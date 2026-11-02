@@ -6,7 +6,43 @@
 
 ---
 
-## 1. What R1 Owns & What Was Completed for Milestone 1
+## 1. What Your Role (R1) Is About & Exactly What Your Code Does
+
+### What Your Part Is About (The Big Picture)
+In this project, a **Command Hub (server, built by R2)** sends 1,000 tasks over **raw UDP** to **4+ Worker nodes (built by R3)** and collects their answers. Because UDP only sends raw bytes (`bytes`) across the network and gives zero guarantees (packets can get corrupted, truncated, lost, duplicated, or arrive out of order), the server and workers cannot just send Python objects or plain text to each other.
+
+**Your job as R1 (Protocol Architect & RFC Lead)** is to design and build **the language they speak on the wire**:
+1. **You define the binary contract (`src/protocol.py`):** You decide the exact byte-by-byte layout of every UDP packet (the 14-byte header and the payloads for all 6 message types) so that R2's server and R3's worker can talk to each other without ever touching raw bytes or `struct` formats themselves.
+2. **You guard the door against bad packets:** Whenever a packet arrives from the UDP socket, your code checks its version, message type, length, fragment numbers, and **16-bit CRC checksum**. If even a single bit was flipped on the network, your code catches it and raises `ProtocolError` so the server or worker drops it safely.
+3. **You build the wire support for our 2 Original Mechanisms (M1 & M2):**
+   - **M1 (Compute-Compensated Adaptive RTO):** Your `TASK_RESULT` payload carries `compute_us` (how many microseconds the worker spent computing) alongside `Attempt_Num` in the header, allowing the server to subtract CPU time from round-trip time and measure pure network delay.
+   - **M2 (Cumulative 32-Bit ACK Bitmap):** Your `ACK_RESULT` payload carries a 32-bit integer (`bitmap`) where each bit confirms whether one of the previous 32 tasks (`task_id - 1` down to `task_id - 32`) is also finished. If an earlier ACK was lost on a 10%-loss network, the next surviving ACK automatically confirms it!
+4. **You write the official specification (`MINI_RFC.md`, `PROPOSAL.md`, `FSM_DIAGRAMS.md`):** Just like real internet protocols (TCP, QUIC, HTTP), your Mini-RFC documents the exact header bit offsets, state machines (FSMs), and rules that R2 and R3 must follow.
+
+---
+
+### Exactly What `src/protocol.py` Does (Step-by-Step)
+Think of `src/protocol.py` as a **translator and security guard** sitting right above the UDP socket on both the server and the workers:
+
+1. **When Sending a Packet (`encode_*` $\rightarrow$ `pack()`):**
+   - First, the server or worker calls one of your payload encoders (for example, `encode_dispatch(...)` to pack a task's 16-byte `job_key`, `start_nonce`, `count`, and `difficulty_bits` into 29 raw bytes, or `encode_result(...)` to pack `found`, `nonce`, and `compute_us` into 13 raw bytes).
+   - Next, they pass that payload to `pack(msg_type, worker_id, task_id, attempt, payload, ...)`.
+   - `pack()` checks that every field is legal (valid message type, payload $\le 512\text{ B}$, valid flags, valid fragment numbers), builds the **14-byte big-endian binary header**, computes a **16-bit CRC-CCITT checksum** over the header + payload, writes the checksum into bytes 12–13, and returns one ready-to-send `bytes` datagram for `socket.sendto()`.
+
+2. **When Receiving a Packet (`unpack()` $\rightarrow$ `decode_*`):**
+   - When `socket.recvfrom(526)` receives raw bytes from the network, the server or worker passes them straight into `unpack(datagram)`.
+   - `unpack()` inspects the raw bytes:
+     - Is it at least 14 bytes long?
+     - Is the protocol version `1` and the message type between `1` and `6`?
+     - Does the actual UDP packet size match `14 + Payload_Len` (not cut off or padded)?
+     - Are the fragment numbers valid (`frag_idx < frag_count`)?
+     - **Does the recomputed 16-bit CRC match `Payload_Checksum`?**
+   - If **anything** fails, `unpack()` immediately raises `ProtocolError` so the caller logs a `drop` and ignores the bad packet.
+   - If everything is valid, `unpack()` returns `(header, payload_bytes)`, where `header` is a clean `Header` object (`header.msg_type`, `header.worker_id`, `header.task_id`, `header.attempt`, etc.), and the caller passes `payload_bytes` to the matching `decode_*` function (`decode_dispatch`, `decode_result`, `decode_ack`, etc.) to get back clean Python fields.
+
+---
+
+## 2. What R1 Owns & What Was Completed for Milestone 1
 
 | File | Purpose | Status |
 |---|---|---|
@@ -18,7 +54,7 @@
 
 ---
 
-## 2. Line-by-Line Walkthrough of `src/protocol.py`
+## 3. Line-by-Line Walkthrough of `src/protocol.py`
 
 ### Lines 1–14: Module Docstring & Imports
 ```python
@@ -147,7 +183,7 @@ def unpack(datagram: bytes) -> tuple[Header, bytes]:
 
 ---
 
-## 3. How to Test Your Code
+## 4. How to Test Your Code
 
 Run the full test suite from the repository root (`c:\Users\aa\Desktop\Networking\RJDAP`):
 
@@ -176,7 +212,7 @@ python -m unittest discover tests -v
 
 ---
 
-## 4. How `src/protocol.py` is Already Optimized (and Why)
+## 5. How `src/protocol.py` is Already Optimized (and Why)
 
 We benchmarked `pack()` and `unpack()` on Python 3.13 (200,000 iterations):
 - **`pack()`:** **~1.45 microseconds** per packet (~690,000 packets/sec)
@@ -188,3 +224,4 @@ For 1,000 tasks across 4 workers, total serialization time for the entire run is
 2. **C-accelerated CRC (`binascii.crc_hqx`):** Runs the CRC-16 polynomial in native C instead of bit-shifting in Python (over 50x faster).
 3. **Zero-copy `memoryview` + chained CRC in `unpack()`:** `unpack()` uses `_HEADER.unpack_from(datagram)` and slices a `memoryview(datagram)` to verify the CRC without copying slices or concatenating byte strings.
 4. **Bit-packed fields (`version|msg_type` and `frag_idx|frag_count`) + 32-bit ACK bitmap:** Saves 2 bytes per header (14 B instead of 16 B) and lets a 4-byte ACK payload replace up to 32 separate ACK packets.
+
