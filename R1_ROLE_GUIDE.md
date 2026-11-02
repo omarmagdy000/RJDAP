@@ -225,3 +225,68 @@ For 1,000 tasks across 4 workers, total serialization time for the entire run is
 3. **Zero-copy `memoryview` + chained CRC in `unpack()`:** `unpack()` uses `_HEADER.unpack_from(datagram)` and slices a `memoryview(datagram)` to verify the CRC without copying slices or concatenating byte strings.
 4. **Bit-packed fields (`version|msg_type` and `frag_idx|frag_count`) + 32-bit ACK bitmap:** Saves 2 bytes per header (14 B instead of 16 B) and lets a 4-byte ACK payload replace up to 32 separate ACK packets.
 
+---
+
+## 6. Milestone 1 Outputs & Expected Results
+
+When grading or presenting Milestone 1 (Phase 1 / Week 7), these are the exact outputs produced by your role (R1), where they are located, and what results they show:
+
+### Output 1: Unit Test Suite Results (`tests/test_protocol.py`)
+Run command:
+```powershell
+python -m unittest discover tests -v
+```
+**Expected Output:**
+```text
+test_bitmap_round_trip (test_protocol.TestAckBitmap.test_bitmap_round_trip) ... ok
+test_low_task_ids_never_go_negative (test_protocol.TestAckBitmap.test_low_task_ids_never_go_negative) ... ok
+test_header_is_14_bytes (test_protocol.TestConstants.test_header_is_14_bytes) ... ok
+test_message_types_fit_in_4_bits (test_protocol.TestConstants.test_message_types_fit_in_4_bits) ... ok
+test_chaining_equals_one_shot (test_protocol.TestCrc.test_chaining_equals_one_shot) ... ok
+test_standard_check_value (test_protocol.TestCrc.test_standard_check_value) ... ok
+test_exact_bytes_of_empty_join (test_protocol.TestPackUnpack.test_exact_bytes_of_empty_join) ... ok
+test_max_payload_ok_and_one_more_rejected (test_protocol.TestPackUnpack.test_max_payload_ok_and_one_more_rejected) ... ok
+test_pack_rejects_bad_fields (test_protocol.TestPackUnpack.test_pack_rejects_bad_fields) ... ok
+test_round_trip_all_fields (test_protocol.TestPackUnpack.test_round_trip_all_fields) ... ok
+test_dispatch_with_and_without_data (test_protocol.TestPayloads.test_dispatch_with_and_without_data) ... ok
+test_heartbeat (test_protocol.TestPayloads.test_heartbeat) ... ok
+test_join_ack (test_protocol.TestPayloads.test_join_ack) ... ok
+test_payloads_fit_in_one_packet (test_protocol.TestPayloads.test_payloads_fit_in_one_packet) ... ok
+test_result (test_protocol.TestPayloads.test_result) ... ok
+test_every_single_bit_flip_is_detected (test_protocol.TestUnpackRejects.test_every_single_bit_flip_is_detected) ... ok
+test_truncated_and_padded (test_protocol.TestUnpackRejects.test_truncated_and_padded) ... ok
+test_unknown_flags_are_ignored_on_receipt (test_protocol.TestUnpackRejects.test_unknown_flags_are_ignored_on_receipt) ... ok
+test_wrong_version (test_protocol.TestUnpackRejects.test_wrong_version) ... ok
+----------------------------------------------------------------------
+Ran 19 tests in 0.005s
+
+OK
+```
+*Meaning:* 100% of header packing, boundary enforcement, CRC computation, bit-corruption detection, and payload encoding tests pass cleanly in under 10 ms.
+
+### Output 2: Wire Serialization & Hex Sample Outputs
+Generated from `src/protocol.py` for Worker 3, Task 42 (included directly in the Mini-RFC Section 3.5):
+
+| Message Type | Wire Size | Exact Raw Hex Output on Wire |
+|---|---|---|
+| `WORKER_JOIN` | 14 B | `11 00 00 03 00 00 00 00 00 01 00 00 c6 57` |
+| `JOIN_ACK` | 18 B | `12 00 00 03 00 00 00 00 00 01 00 04 44 df 03 e8 00 c8` |
+| `HEARTBEAT` | 23 B | `13 00 00 03 00 00 00 00 00 01 00 09 de 9a 00 00 00 00 00 0f 42 40 01` |
+| `TASK_DISPATCH` | 43 B | `14 00 00 03 00 00 00 2a 01 01 00 1d 9b bd 00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff 00 00 00 00 00 20 0b 20 00 00 c3 50 10` |
+| `TASK_RESULT` | 27 B | `15 00 00 03 00 00 00 2a 01 01 00 0d 88 b9 01 00 00 00 00 00 20 85 89 00 00 30 d4` |
+| `ACK_RESULT` | 18 B | `16 00 00 03 00 00 00 2a 01 01 00 04 e9 d7 00 00 00 05` |
+
+*Meaning:* Proves that every packet fits within the maximum datagram size (526 B) and matches the byte-by-byte wire specification in the RFC.
+
+### Output 3: Benchmark & Performance Outputs
+Measured across 200,000 calls:
+- `pack()` throughput: **~690,000 packets/sec** (1.45 µs per packet)
+- `unpack()` throughput: **~515,000 packets/sec** (1.94 µs per packet)
+*Meaning:* Packet encoding and decoding consumes less than 1% of total system CPU time during the 1,000-task experiment.
+
+### Output 4: Document Deliverables for Milestone 1
+1. **[`docs/rfc/MINI_RFC.md`](docs/rfc/MINI_RFC.md):** Complete formal RFC draft for Sections 1–3 (protocol architecture, FSM diagrams, and bit-level message specifications).
+2. **[`docs/proposal/PROPOSAL.md`](docs/proposal/PROPOSAL.md):** 3-page project proposal covering motivation, problem statement, technical approach, and the 2 original mechanisms.
+3. **[`docs/diagrams/FSM_DIAGRAMS.md`](docs/diagrams/FSM_DIAGRAMS.md):** Formal Mermaid FSMs for Command Hub task states, worker liveness, and worker node compute loop.
+4. **Git Artifacts:** Commit history on `main` and branch `r1/protocol-v1`, tagged `protocol-v1`, and pushed to remote `origin`.
+
