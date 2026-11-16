@@ -4,11 +4,10 @@
 **Project 2:** Reliable Job Dispatch & Aggregation Protocol (RJDAP)  
 **Team Members & Roles:**  
 - **R1 (Protocol Architect & RFC Lead):** `omarmagdy000` (Omar Magdy)  
-- **R2 (Command Hub Engineer):** `________`  
-- **R3 (Worker Node Engineer):** `________`  
-- **R4 (Network Testbed & Automation Engineer):** `________`  
-- **R5 (Data, Metrics & Presentation Lead):** `________`  
-
+- **R2 (Command Hub Engineer):** `Mariam`  
+- **R3 (Worker Node Engineer):** `Sama (Elsamasemo)`  
+- **R4 (Network Testbed & Automation Engineer):** `Jenny Samuel`  
+- **R5 (Data, Metrics & Presentation Lead):** `Toqa Yehia`
 ---
 
 ## 1. Scenario & Problem Statement
