@@ -1,64 +1,17 @@
 import argparse
-import csv
-import os
 import socket
 import time
 from collections import deque
 
 import protocol as P
-
-
-JOB_KEY = b"rjdap-job-key-01"
-TASK_SIZE = 20000
-DIFFICULTY_BITS = 12
+import tasks
+from logger import Logger
 
 HEARTBEAT_MS = 1000
 BASE_RTO_MS = 200
 SOCKET_TIMEOUT = 0.05
 TASK_TIMEOUT = 2.0
 MAX_ATTEMPTS = 255
-
-
-class CsvLog:
-    COLUMNS = (
-        "ts_us,node,role,event,msg_type,task_id,worker_id,"
-        "attempt,bytes,seed,scenario,run"
-    )
-
-    def __init__(self, path, seed, scenario, run):
-        folder = os.path.dirname(path)
-        if folder:
-            os.makedirs(folder, exist_ok=True)
-
-        new_file = not os.path.exists(path) or os.path.getsize(path) == 0
-        self.file = open(path, "a", newline="", buffering=1, encoding="utf-8")
-        self.writer = csv.writer(self.file)
-
-        if new_file:
-            self.writer.writerow(self.COLUMNS.split(","))
-
-        self.seed = seed
-        self.scenario = scenario
-        self.run = run
-
-    def event(self, event, msg_type, task_id, worker_id, attempt, nbytes):
-        self.writer.writerow([
-            time.time_ns() // 1000,
-            "server",
-            "server",
-            event,
-            P.MSG_NAMES.get(msg_type, str(msg_type)),
-            task_id,
-            worker_id,
-            attempt,
-            nbytes,
-            self.seed,
-            self.scenario,
-            self.run,
-        ])
-
-    def close(self):
-        self.file.close()
 
 
 class Server:
@@ -69,8 +22,8 @@ class Server:
         self.sock.bind((args.host, args.port))
         self.sock.settimeout(SOCKET_TIMEOUT)
 
-        self.log = CsvLog(
-            args.log, args.seed, args.scenario, args.run
+        self.log = Logger(
+            args.log, "server", "server", args.seed, args.scenario, args.run
         )
 
         # Worker ID -> worker information.
@@ -78,6 +31,7 @@ class Server:
 
         # Task IDs waiting to be dispatched.
         self.pending = deque(range(1, args.tasks + 1))
+        self.task_list = {t.task_id: t for t in tasks.make_tasks(args.tasks, args.seed)}
 
         # Task ID -> task information.
         self.tasks = {}
@@ -216,12 +170,8 @@ class Server:
         if attempt > 1:
             self.reassigned_task_count += 1
 
-        payload = P.encode_dispatch(
-            JOB_KEY,
-            task_id * TASK_SIZE,
-            TASK_SIZE,
-            DIFFICULTY_BITS,
-        )
+        t = self.task_list[task_id]
+        payload = P.encode_dispatch(t.job_key, t.start_nonce, t.count, t.difficulty_bits)
 
         self.send(
             P.TASK_DISPATCH,
@@ -280,6 +230,7 @@ class Server:
         # A result is accepted only once.
         if task_id in self.done:
             self.duplicate_results_dropped += 1
+            self.log.event("dup", header.msg_type, task_id, worker_id, header.attempt, 0)
             print(f"[server] Duplicate result dropped: task {task_id}")
 
         else:
@@ -339,6 +290,7 @@ class Server:
                 f"[server] Timeout: task {task_id} "
                 f"from worker {worker_id}"
             )
+            self.log.event("reassign", P.TASK_DISPATCH, task_id, worker_id, task["attempt"], 0)
 
             # Release the old worker's assignment if it still matches.
             if worker is not None and worker["busy_task"] == task_id:
@@ -354,23 +306,6 @@ class Server:
             self.pending.appendleft(task_id)
 
         self.dispatch_tasks()
-
-    # ---------------------------------------------------------
-    # Optional heartbeat support
-    # ---------------------------------------------------------
-
-    def handle_heartbeat(self, header, payload):
-        worker = self.workers.get(header.worker_id)
-
-        if worker is None:
-            return
-
-        try:
-            _sent_ts_us, _state = P.decode_heartbeat(payload)
-        except P.ProtocolError:
-            return
-
-        worker["last_seen"] = time.monotonic()
 
     # ---------------------------------------------------------
     # Main server loop
@@ -408,9 +343,6 @@ class Server:
                     elif header.msg_type == P.TASK_RESULT:
                         self.handle_result(header, payload, addr)
 
-                    elif header.msg_type == P.HEARTBEAT:
-                        self.handle_heartbeat(header, payload)
-
                 self.check_timeouts()
 
         except KeyboardInterrupt:
@@ -420,9 +352,6 @@ class Server:
             self.print_summary()
             self.close()
 
-    # ---------------------------------------------------------
-    # Summary and cleanup
-    # ---------------------------------------------------------
 
     def print_summary(self):
         elapsed = (
