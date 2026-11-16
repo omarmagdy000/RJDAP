@@ -1,6 +1,4 @@
-
 import argparse
-import hashlib
 import os
 import socket
 import sys
@@ -8,20 +6,10 @@ import time
 from collections import deque
 
 import protocol as P
-
-
-def run_task(job_key, start_nonce, count, difficulty_bits):
-
-    for n in range(start_nonce, start_nonce + count):
-        digest = hashlib.sha256(job_key + str(n).encode()).digest()
-        if int.from_bytes(digest, "big") >> (256 - difficulty_bits) == 0:
-            return True, n
-    return False, 0
+import tasks
 
 
 class CsvLog:
-
-
     COLUMNS = ("ts_us,node,role,event,msg_type,task_id,worker_id,attempt,"
                "bytes,seed,scenario,run")
 
@@ -54,7 +42,7 @@ class Worker:
         self.server = (host, int(port))
         self.id = args.id
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(0.5)  # never block forever on recvfrom
+        self.sock.settimeout(0.5)
         self.log = CsvLog(args.log, f"worker{args.id}", args.seed,
                           args.scenario, args.run)
         self.backlog = deque()
@@ -63,20 +51,17 @@ class Worker:
         self.tasks_done = 0
         self.compute_s = 0.0
 
-
     def send(self, msg_type, task_id=0, attempt=0, payload=b"", flags=0):
         data = P.pack(msg_type, self.id, task_id, attempt, payload, flags)
         self.sock.sendto(data, self.server)
         self.log.event("send", msg_type, task_id, self.id, attempt, len(data))
 
     def receive(self):
-
         try:
             data, _addr = self.sock.recvfrom(P.MAX_DATAGRAM)
         except socket.timeout:
             return None
         except ConnectionResetError:
-
             time.sleep(0.2)
             return None
         try:
@@ -88,9 +73,7 @@ class Worker:
                        header.worker_id, header.attempt, len(data))
         return header, payload
 
-
     def join(self, tries):
-
         for n in range(1, tries + 1):
             self.send(P.WORKER_JOIN)
             got = self.receive()
@@ -120,8 +103,8 @@ class Worker:
             return False
 
         t0 = time.perf_counter()
-        found, nonce = run_task(task.job_key, task.start_nonce, task.count,
-                                task.difficulty_bits)
+        found, nonce = tasks.run_task(task.job_key, task.start_nonce, task.count,
+                                      task.difficulty_bits)
         compute_s = time.perf_counter() - t0
         self.compute_s += compute_s
         self.tasks_done += 1
@@ -144,7 +127,6 @@ class Worker:
                     return True
             elif reply.msg_type == P.TASK_DISPATCH:
                 self.backlog.append(got)
-
         self.log.event("timeout", P.TASK_RESULT, header.task_id, self.id,
                        header.attempt, 0)
         print(f"[worker{self.id}] no ACK for task {header.task_id}")
@@ -165,14 +147,12 @@ class Worker:
                 self.handle_task(header, payload)
                 last_activity = time.monotonic()
 
-
     def close(self):
         self.log.close()
         self.sock.close()
 
 
 def self_check():
-
     print(f"protocol.py: {P.PROTOCOL_NAME} v{P.VERSION}, "
           f"header {P.HEADER_SIZE} bytes, max payload {P.MAX_PAYLOAD}")
     for code, name in sorted(P.MSG_NAMES.items()):
@@ -186,7 +166,7 @@ def self_check():
           and task.job_key == key and task.start_nonce == 100
           and task.count == 50 and task.difficulty_bits == 8)
     print("pack/unpack round trip:", "OK" if ok else "FAILED")
-    found, nonce = run_task(key, 0, 100000, 12)
+    found, nonce = tasks.run_task(key, 0, 100000, 12)
     print(f"run_task test: found={found}, nonce={nonce}")
     return 0 if ok else 1
 

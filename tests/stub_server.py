@@ -7,11 +7,9 @@ from collections import deque
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "src"))
-import protocol as P  # noqa: E402
+import protocol as P
+import tasks
 
-JOB_KEY = b"rjdap-job-key-01"
-TASK_SIZE = 20000
-DIFFICULTY_BITS = 12
 HEARTBEAT_MS = 1000
 BASE_RTO_MS = 200
 
@@ -21,6 +19,7 @@ def main():
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=9000)
     p.add_argument("--tasks", type=int, default=20)
+    p.add_argument("--seed", type=int, default=42)
     p.add_argument("--idle-exit", type=float, default=30.0,
                    help="quit if nothing arrives for this many seconds")
     args = p.parse_args()
@@ -29,11 +28,14 @@ def main():
     sock.bind((args.host, args.port))
     sock.settimeout(0.5)
 
-    pending = deque(range(1, args.tasks + 1))
+    task_list = tasks.make_tasks(args.tasks, args.seed)
+    by_id = {t.task_id: t for t in task_list}
+    pending = deque(t.task_id for t in task_list)
     done = {}
     in_flight = {}
     per_worker = {}
     duplicates = 0
+    wrong = 0
     started = None
     last_packet = time.monotonic()
 
@@ -44,8 +46,9 @@ def main():
         if not pending:
             return
         task_id = pending.popleft()
-        payload = P.encode_dispatch(JOB_KEY, task_id * TASK_SIZE, TASK_SIZE,
-                                    DIFFICULTY_BITS)
+        t = by_id[task_id]
+        payload = P.encode_dispatch(t.job_key, t.start_nonce, t.count,
+                                    t.difficulty_bits)
         send(P.TASK_DISPATCH, addr, worker_id, task_id, 1, payload)
         in_flight[worker_id] = task_id
 
@@ -82,15 +85,22 @@ def main():
                     duplicates += 1
                 else:
                     try:
-                        done[header.task_id] = P.decode_result(payload)
+                        result = P.decode_result(payload)
                     except P.ProtocolError:
                         continue
+                    t = by_id.get(header.task_id)
+                    if t is None:
+                        continue
+                    expected = tasks.run_task(t.job_key, t.start_nonce, t.count,
+                                              t.difficulty_bits)
+                    if (result.found, result.nonce) != expected:
+                        wrong += 1
+                    done[header.task_id] = result
                     per_worker[wid] = per_worker.get(wid, 0) + 1
                 in_flight.pop(wid, None)
                 send(P.ACK_RESULT, addr, wid, header.task_id, header.attempt,
                      P.encode_ack(header.task_id, done))
                 give_task(wid, addr)
-
     except KeyboardInterrupt:
         print("\nstopped with Ctrl+C")
 
@@ -98,6 +108,7 @@ def main():
     print("---- summary ----")
     print(f"tasks done: {len(done)}/{args.tasks}")
     print(f"duplicate results dropped: {duplicates}")
+    print(f"results that differ from tasks.run_task: {wrong}")
     print(f"results per worker: {dict(sorted(per_worker.items()))}")
     print(f"elapsed: {elapsed:.2f} s")
     sock.close()
