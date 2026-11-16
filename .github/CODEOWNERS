@@ -4,7 +4,6 @@
 /docs/rfc/ @omarmagdy000
 /docs/proposal/ @omarmagdy000
 /docs/diagrams/ @omarmagdy000
-/R1_ROLE_GUIDE.md @omarmagdy000
 /src/server.py @R2
 /src/worker.py @R3
 /scripts/ @R4
