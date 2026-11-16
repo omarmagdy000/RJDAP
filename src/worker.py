@@ -7,31 +7,7 @@ from collections import deque
 
 import protocol as P
 import tasks
-
-
-class CsvLog:
-    COLUMNS = ("ts_us,node,role,event,msg_type,task_id,worker_id,attempt,"
-               "bytes,seed,scenario,run")
-
-    def __init__(self, path, node, seed, scenario, run):
-        folder = os.path.dirname(path)
-        if folder:
-            os.makedirs(folder, exist_ok=True)
-        is_new = not os.path.exists(path) or os.path.getsize(path) == 0
-        self.file = open(path, "a", buffering=1, encoding="utf-8")
-        self.node, self.seed, self.scenario, self.run = node, seed, scenario, run
-        if is_new:
-            self.file.write(self.COLUMNS + "\n")
-
-    def event(self, event, msg_type, task_id, worker_id, attempt, nbytes):
-        ts_us = time.time_ns() // 1000
-        name = P.MSG_NAMES.get(msg_type, str(msg_type))
-        self.file.write(
-            f"{ts_us},{self.node},worker,{event},{name},{task_id},{worker_id},"
-            f"{attempt},{nbytes},{self.seed},{self.scenario},{self.run}\n")
-
-    def close(self):
-        self.file.close()
+from logger import Logger
 
 
 class Worker:
@@ -43,7 +19,7 @@ class Worker:
         self.id = args.id
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(0.5)
-        self.log = CsvLog(args.log, f"worker{args.id}", args.seed,
+        self.log = Logger(args.log, f"worker{args.id}", "worker", args.seed,
                           args.scenario, args.run)
         self.backlog = deque()
         self.heartbeat_ms = 1000
